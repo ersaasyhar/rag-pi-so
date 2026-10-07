@@ -1,0 +1,16 @@
+.venv/
+__pycache__/
+*.py[cod]
+.env
+data/pdfs/
+data/extracted/
+data/texts/
+data/parsed/
+data/chunks/
+data/benchmark.jsonl
+data/corpus_manifest.json
+data/qdrant_v1/
+data/qdrant_v2/
+data/results/
+.pytest_cache/
+.ruff_cache/
