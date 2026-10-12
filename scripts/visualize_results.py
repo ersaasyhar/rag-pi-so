@@ -18,7 +18,7 @@ def plot_retrieval_performance() -> None:
     methods = [
         "dense-baseline",
         "hybrid-bm25",
-        "tree-llm",
+        "tree-llm (N=3)",
         "tree-jev",
         "tree-d3-base",
         "tree-d3 (tuned)",
@@ -30,12 +30,7 @@ def plot_retrieval_performance() -> None:
     x = np.arange(len(methods))
     width = 0.25
 
-    plt.figure(figsize=(10, 5.5), dpi=150)
-    plt.style.use(
-        "seaborn-v0_8-whitegrid" if "seaborn-v0_8-whitegrid" in plt.style.available else "default"
-    )
-
-    fig, ax = plt.subplots(figsize=(11, 5.5))
+    fig, ax = plt.subplots(figsize=(11, 5.5), dpi=150)
     ax.grid(axis="y", linestyle="--", alpha=0.5, zorder=0)
 
     rects1 = ax.bar(
@@ -240,6 +235,8 @@ def plot_d3_decision_tuning() -> None:
 
 
 def main() -> None:
+    if "seaborn-v0_8-whitegrid" in plt.style.available:
+        plt.style.use("seaborn-v0_8-whitegrid")
     print(f"Generating benchmark visualization assets in {ASSETS_DIR}...")
     plot_retrieval_performance()
     plot_latency_accuracy_tradeoff()
