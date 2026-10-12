@@ -15,6 +15,7 @@ if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
 from src.evaluate import run_evaluation
+from src.tree_reasoning.d3_navigator import answer as d3_answer
 from src.tree_reasoning.jev_navigator import answer as jev_answer
 from src.tree_reasoning.pageindex_retriever import answer as pageindex_llm_answer
 from src.vector_rag.hybrid_rag import answer as hybrid_answer
@@ -56,6 +57,8 @@ def run_single_method(
         )
     elif method == "tree-jev":
         return run_evaluation("tree-jev", jev_answer, items, top_k=top_k, judge_llm=judge_llm)
+    elif method == "tree-d3":
+        return run_evaluation("tree-d3", d3_answer, items, top_k=top_k, judge_llm=judge_llm)
     else:
         raise ValueError(f"Unknown method: {method}")
 
@@ -70,6 +73,7 @@ def compare_all_methods(
         ("Hybrid BM25 (Qdrant Dense+Sparse)", "hybrid-bm25", hybrid_answer),
         ("Tree Index + LLM (PageIndex)", "tree-llm", pageindex_llm_answer),
         ("Tree Index + Jev (TypeSafe)", "tree-jev", jev_answer),
+        ("Tree Index + D3 Edge (Local 0.6B)", "tree-d3", d3_answer),
     ]
 
     all_results = []
@@ -136,6 +140,7 @@ def main() -> None:
             "hybrid-bm25",
             "tree-llm",
             "tree-jev",
+            "tree-d3",
         ],
         help="Retrieval method to test (dense-baseline, hybrid-bm25, tree-llm, tree-jev)",
     )

@@ -11,6 +11,7 @@ if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
 from src.schema import RAGResponse
+from src.tree_reasoning.d3_navigator import answer as d3_answer
 from src.tree_reasoning.jev_navigator import answer as jev_answer
 from src.tree_reasoning.pageindex_retriever import answer as pageindex_llm_answer
 from src.vector_rag.hybrid_rag import answer as hybrid_answer
@@ -26,6 +27,8 @@ def get_answer_fn(method: str):
         return pageindex_llm_answer
     elif method == "tree-jev":
         return jev_answer
+    elif method == "tree-d3":
+        return d3_answer
     else:
         raise ValueError(f"Unknown method: {method}")
 
@@ -90,8 +93,9 @@ def main() -> None:
             "hybrid-bm25",
             "tree-llm",
             "tree-jev",
+            "tree-d3",
         ],
-        help="Retrieval backend to use (dense-baseline, hybrid-bm25, tree-llm, tree-jev)",
+        help="Retrieval backend to use (dense-baseline, hybrid-bm25, tree-llm, tree-jev, tree-d3)",
     )
     parser.add_argument("--top-k", type=int, default=5, help="Number of retrieved chunks")
     parser.add_argument("--query", type=str, default="", help="Single-shot query (non-interactive)")

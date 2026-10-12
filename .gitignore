@@ -8,6 +8,7 @@ data/texts/
 data/parsed/
 data/chunks/
 data/benchmark.jsonl
+data/d3_navigation_train.jsonl
 data/corpus_manifest.json
 data/qdrant_v1/
 data/qdrant_v2/

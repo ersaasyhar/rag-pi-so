@@ -37,7 +37,7 @@ Defined in `.env`:
 - `scripts/`: Download corpus, generate benchmark, run benchmark CLI.
 - `src/`: Extractor, legal parser, chunker, LLM client, context formatter, evaluation harness, chat assistant.
   - `src/vector_rag/`: Dense baseline (ingest, retriever, RAG) and Hybrid BM25 (hybrid_ingest, hybrid_retriever, hybrid_rag).
-  - `src/tree_reasoning/`: PageIndex tree builder and retrievers (`tree-llm`, `tree-jev`).
+  - `src/tree_reasoning/`: PageIndex tree builder and retrievers (`tree-llm`, `tree-jev`, `tree-d3`).
 
 ## Retrieval Methods
 
@@ -45,3 +45,4 @@ Defined in `.env`:
 2. `hybrid-bm25`: Qdrant dense + sparse BM25 with Reciprocal Rank Fusion (`indo_law_v2`).
 3. `tree-llm`: Hierarchical tree index (BAB $\rightarrow$ Pasal) with LLM reasoning navigator.
 4. `tree-jev`: Hierarchical tree index with TypeSafe AI Jev System 1 navigator.
+5. `tree-d3`: Hierarchical tree index with local open-weight `vllm-sr/d3-edge` (0.6B) System 1 navigator.

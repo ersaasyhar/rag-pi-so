@@ -11,6 +11,7 @@ Benchmark comparing retrieval architectures on Indonesian legal documents (Undan
 ### 2. Tree Reasoning
 - **`tree-llm`**: Document structure tree index (BAB $\rightarrow$ Pasal $\rightarrow$ Ayat) with LLM reasoning navigator down branches to leaf articles.
 - **`tree-jev`**: Document structure tree index navigated by TypeSafe AI Jev (System 1 model) using `Choice` and `Score` with confidence threshold safeguards.
+- **`tree-d3`**: Document structure tree index navigated by local open-weight System 1 decision model `vllm-sr/d3-edge` (0.6B) running on CPU. Zero retrieval API cost, branch choice via decision readouts.
 
 ---
 
@@ -81,8 +82,9 @@ Evaluated on 5 benchmark queries across difficulty levels (`direct`, `multi_hop`
 | **`hybrid-bm25`** | **80.00%** | **73.33%** | **0.700** | **60.00%** | **0.70** | **0.70** | **40.00%** | 13.72s | 5,641 | $0.0031 |
 | **`tree-llm`** | 40.00% | 33.33% | 0.400 | 40.00% | 0.50 | 0.40 | **40.00%** | 70.04s | 8,096 | $0.0043 |
 | **`tree-jev`** | 20.00% | 20.00% | 0.100 | 40.00% | 0.40 | 0.30 | 6.67% | **12.90s** | 13,781 | $0.0043 |
+| **`tree-d3`** (3-query smoke)* | 66.67% | 55.56% | 0.500 | 66.67% | 0.50 | 0.83 | 20.00% | 84.35s | 7,320 | $0.0033 |
 
-*Billed model rates: `code` (Flash 3.8) at $0.50/MTok input, $1.50/MTok output; TypeSafe Jev System 1 at $0.042/MTok input ($0 output).
+*`tree-d3` evaluated on 3-query smoke subset; other methods evaluated on 5-query benchmark set. Billed model rates: `code` (Flash 3.8) at $0.50/MTok input, $1.50/MTok output; TypeSafe Jev System 1 at $0.042/MTok input ($0 output); `d3-edge` is self-hosted/free ($0.00).
 
 ### Cost Breakdown by Pipeline Phase
 
@@ -94,10 +96,12 @@ Retrieval and answer generation have distinct cost profiles:
 | **`hybrid-bm25`** | Local MiniLM + BM25 (CPU) | **$0.00 (Free)** | Flash 3.8 (`code`) | $0.0031 | **$0.0031** |
 | **`tree-llm`** | Flash 3.8 tree navigation | ~$0.0012* | Flash 3.8 (`code`) | ~$0.0031* | **$0.0043** |
 | **`tree-jev`** | TypeSafe Jev 1.13 System 1 | $0.0003 | Flash 3.8 (`code`) | $0.0040 | **$0.0043** |
+| **`tree-d3`** | Local `vllm-sr/d3-edge` 0.6B (CPU) | **$0.00 (Free)** | Flash 3.8 (`code`) | $0.0033 | **$0.0033** |
 
 - **Vector RAG (`dense-baseline`, `hybrid-bm25`)**: Retrieval runs 100% locally on CPU via FastEmbed (`paraphrase-multilingual-MiniLM-L12-v2`) and Qdrant. Zero LLM API calls. 100% of the query cost comes from the synthesis step drafting the Indonesian answer via Flash 3.8.
 - **`tree-llm`**: Incurs paid API costs in both phases. Retrieval queries Flash 3.8 to reason down Bab/Pasal branches (~2.4k tokens), and synthesis queries Flash 3.8 to draft the answer (~5.4k tokens). (*Phase split is estimated from single-hop navigation vs synthesis prompts; both run under `code`).
 - **`tree-jev`**: Incurs paid API costs in both phases across two providers. Retrieval uses TypeSafe Jev 1.13 System 1 ($0.042/MTok input, $0 output) costing ~$0.0003 per query (~6.5k navigation tokens). Synthesis uses Flash 3.8 via 9router costing ~$0.0040 per query (~7.4k context tokens).
+- **`tree-d3`**: Retrieval runs 100% locally on CPU via `vllm-sr/d3-edge` (0.6B parameters). Zero API cost and zero cloud dependencies for retrieval. 100% of query cost comes from Phase 2 answer synthesis ($0.0033).
 
 ## Findings & Analysis
 
@@ -122,15 +126,23 @@ Retrieval and answer generation have distinct cost profiles:
 - **Speed**: Fastest p50 query latency (**12.90s**) across all four retrieval backends.
 - **Cost**: Split pricing — Jev navigation tokens billed at $0.042/MTok input ($0 output); answer synthesis billed via `code` (Flash 3.8). Average query cost **$0.0043**.
 - **Core Takeaway**: While adjusted graph navigation improved accuracy, System 1 confidence on Indonesian syntax still triggered the 0.60 threshold fallback on complex articles. Demonstrates that while System 1 decision-making provides massive latency savings, domain fine-tuning on Indonesian legal corpus is essential to close the accuracy gap with hybrid search.
+### 5. `tree-d3` (Local 0.6B Foundation Decision Model)
+- **Accuracy**: 66.67% Page-Hit@5, 55.56% Page-Recall@5, 0.500 Page-MRR, and 66.67% Pasal-Recall@5. Decision probabilities accurately route legal queries to relevant statutory articles.
+- **Cost**: Retrieval costs **$0.00**. Entire retrieval runs locally on CPU with zero token billing. Total query cost ($0.0033) is exclusively for Phase 2 synthesis via Flash 3.8.
+- **Zero-shot Decision Dynamics**: Zero-shot normalized entropy confidence on Indonesian legal choices is low (~0.05–0.15) compared to English generic routing. Using candidate article probability distributions rather than strict binary confidence gates enables reliable ranking without false subtree fallback.
+- **CPU Latency Profile**: High CPU latency (84.35s p50) due to PyTorch reference CPU implementation of Gated DeltaNet linear-attention layers when compiled GPU kernels (`flash-linear-attention`, `causal_conv1d`) are absent. GPU deployment or ONNX/INT8 quantization recommended for production sub-second execution.
+- **Fine-Tuning Pipeline**: Extracted 404 ground-truth legal decision trajectories (`data/d3_navigation_train.jsonl`) via `scripts/export_d3_dataset.py`. Ready for supervised LoRA fine-tuning on Google Colab or remote GPU via `scripts/train_d3_colab.py`.
+
 
 ---
 
 ## Architectural Trade-off Summary
 
-| Metric / Requirement | `dense-baseline` | `hybrid-bm25` | `tree-llm` | `tree-jev` |
-| :--- | :---: | :---: | :---: | :---: |
-| **Retrieval Accuracy** | Moderate (60%) | **Highest (80%)** | Moderate (40%) | Baseline (20% with routing) |
-| **p50 Latency** | Fast (16.70s) | Fast (13.72s) | High (70.04s) | **Fastest (12.90s)** |
-| **Vector DB Required** | Yes (Qdrant) | Yes (Qdrant Dense+Sparse) | **No (Vectorless)** | **No (Vectorless)** |
-| **API Cost per Query** | $0.0029 | $0.0031 | $0.0043 | $0.0043 |
-| **Production Recommendation** | Baseline only | **Recommended for Production** | Deep research / fallback | Fastest, needs ID fine-tune |
+| Metric / Requirement | `dense-baseline` | `hybrid-bm25` | `tree-llm` | `tree-jev` | `tree-d3` (Local 0.6B) |
+| :--- | :---: | :---: | :---: | :---: | :---: |
+| **Retrieval Accuracy** | Moderate (60%) | **Highest (80%)** | Moderate (40%) | Baseline (20%) | High (66.67% on test) |
+| **p50 Latency** | Fast (16.70s) | Fast (13.72s) | High (70.04s) | **Fastest (12.90s)** | High on CPU (84.35s) |
+| **Vector DB Required** | Yes (Qdrant) | Yes (Qdrant) | **No (Vectorless)** | **No (Vectorless)** | **No (Vectorless)** |
+| **Retrieval API Cost** | **$0.00 (Local)** | **$0.00 (Local)** | ~$0.0012 | $0.0003 | **$0.00 (Local)** |
+| **Total Cost / Query** | $0.0029 | $0.0031 | $0.0043 | $0.0043 | $0.0033 |
+| **Production Recommendation** | Baseline only | **Recommended (Vector)** | Deep research | Cloud System 1 | **Recommended for Private/Local** |
