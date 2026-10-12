@@ -9,6 +9,9 @@ data/parsed/
 data/chunks/
 data/benchmark.jsonl
 data/d3_navigation_train.jsonl
+data/d3_synthetic_train.jsonl
+data/*.jsonl
+data/bm25_model.json
 data/corpus_manifest.json
 data/qdrant_v1/
 data/qdrant_v2/

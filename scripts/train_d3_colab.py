@@ -41,7 +41,9 @@ def format_sample_to_prompt(sample: dict[str, Any]) -> dict[str, str]:
     """Format structured trajectory decision into text prompt and target code response."""
     state = sample.get("state", {})
     state_str = json.dumps(state, ensure_ascii=False) if isinstance(state, dict) else str(state)
-    instructions = sample.get("instructions", "Pilih bagian dokumen yang paling mungkin memuat jawaban pertanyaan.")
+    instructions = sample.get(
+        "instructions", "Pilih bagian dokumen yang paling mungkin memuat jawaban pertanyaan."
+    )
     criteria = sample.get("criteria", {})
     target_id = sample.get("target_choice")
 
@@ -77,13 +79,15 @@ def prepare_dataset(jsonl_path: Path):
             if line.strip():
                 sample = json.loads(line)
                 formatted = format_sample_to_prompt(sample)
-                records.append({
-                    "messages": [
-                        {"role": "system", "content": formatted["system"]},
-                        {"role": "user", "content": formatted["user"]},
-                        {"role": "assistant", "content": formatted["assistant"]},
-                    ]
-                })
+                records.append(
+                    {
+                        "messages": [
+                            {"role": "system", "content": formatted["system"]},
+                            {"role": "user", "content": formatted["user"]},
+                            {"role": "assistant", "content": formatted["assistant"]},
+                        ]
+                    }
+                )
 
     logger.info("Loaded %d training examples from %s", len(records), jsonl_path)
     return Dataset.from_list(records)
@@ -110,12 +114,12 @@ def train(
         tokenizer.pad_token = tokenizer.eos_token
 
     device_map = "auto" if torch.cuda.is_available() else "cpu"
-    torch_dtype = torch.bfloat16 if torch.cuda.is_available() else torch.float32
+    dtype = torch.bfloat16 if torch.cuda.is_available() else torch.float32
 
     model = AutoModelForCausalLM.from_pretrained(
         model_id,
         trust_remote_code=True,
-        torch_dtype=torch_dtype,
+        dtype=dtype,
         device_map=device_map,
     )
 
@@ -161,9 +165,21 @@ def train(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Fine-tune vllm-sr/d3-edge on legal navigation trajectories.")
-    parser.add_argument("--dataset", type=Path, default=Path("data/d3_navigation_train.jsonl"), help="Path to input JSONL dataset")
-    parser.add_argument("--output_dir", type=Path, default=Path("models/d3_edge_lora"), help="Output directory for LoRA weights")
+    parser = argparse.ArgumentParser(
+        description="Fine-tune vllm-sr/d3-edge on legal navigation trajectories."
+    )
+    parser.add_argument(
+        "--dataset",
+        type=Path,
+        default=Path("data/d3_navigation_train.jsonl"),
+        help="Path to input JSONL dataset",
+    )
+    parser.add_argument(
+        "--output_dir",
+        type=Path,
+        default=Path("models/d3_edge_lora"),
+        help="Output directory for LoRA weights",
+    )
     parser.add_argument("--epochs", type=int, default=3, help="Number of training epochs")
     parser.add_argument("--lr", type=float, default=2e-4, help="Learning rate")
     parser.add_argument("--batch_size", type=int, default=4, help="Batch size per device")

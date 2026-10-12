@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -11,6 +12,7 @@ if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
 from src.schema import RAGResponse
+from src.tree_reasoning.d3_navigator import D3Navigator
 from src.tree_reasoning.d3_navigator import answer as d3_answer
 from src.tree_reasoning.jev_navigator import answer as jev_answer
 from src.tree_reasoning.pageindex_retriever import answer as pageindex_llm_answer
@@ -27,7 +29,9 @@ def get_answer_fn(method: str):
         return pageindex_llm_answer
     elif method == "tree-jev":
         return jev_answer
-    elif method == "tree-d3":
+    elif method == "tree-d3-base":
+        return lambda q, top_k=5: D3Navigator(model_name="vllm-sr/d3-edge").answer(q, top_k=top_k)
+    elif method in ("tree-d3", "tree-d3-finetuned"):
         return d3_answer
     else:
         raise ValueError(f"Unknown method: {method}")
@@ -94,14 +98,28 @@ def main() -> None:
             "tree-llm",
             "tree-jev",
             "tree-d3",
+            "tree-d3-base",
+            "tree-d3-finetuned",
         ],
-        help="Retrieval backend to use (dense-baseline, hybrid-bm25, tree-llm, tree-jev, tree-d3)",
+        help="Retrieval backend to use (dense-baseline, hybrid-bm25, tree-llm, tree-jev, tree-d3, tree-d3-base)",
     )
     parser.add_argument("--top-k", type=int, default=5, help="Number of retrieved chunks")
     parser.add_argument("--query", type=str, default="", help="Single-shot query (non-interactive)")
+    parser.add_argument(
+        "--d3-model", type=str, default=None, help="Hugging Face model ID for D3 navigator"
+    )
+    parser.add_argument(
+        "--d3-adapter",
+        type=str,
+        default=None,
+        help="Path to LoRA adapter directory for D3 navigator",
+    )
 
     args = parser.parse_args()
-
+    if args.d3_model:
+        os.environ["D3_MODEL_NAME"] = args.d3_model
+    if args.d3_adapter:
+        os.environ["D3_ADAPTER_PATH"] = args.d3_adapter
     if args.query:
         answer_fn = get_answer_fn(args.method)
         resp = answer_fn(args.query, top_k=args.top_k)

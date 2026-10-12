@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -23,35 +24,94 @@ DATA_DIR = BASE_DIR / "data"
 MANIFEST_PATH = DATA_DIR / "corpus_manifest.json"
 EXTRACTED_DIR = DATA_DIR / "extracted"
 
-_GLOBAL_D3_MODEL: Any | None = None
+_GLOBAL_D3_MODELS: dict[tuple[str, str | None, str], Any] = {}
 
 
-def get_d3_model(model_name: str = "vllm-sr/d3-edge", device: str = "cpu") -> Any | None:
-    """Singleton lazy loader for local vllm-sr/d3-edge model."""
-    global _GLOBAL_D3_MODEL
-    if _GLOBAL_D3_MODEL is None:
-        try:
-            from transformers import AutoModel
+def get_d3_model(
+    model_name: str | None = None,
+    device: str = "cpu",
+    adapter_path: str | Path | None = None,
+) -> Any | None:
+    """Singleton lazy loader keyed by model_name, adapter_path, and device."""
+    if model_name is None:
+        model_name = os.environ.get("D3_MODEL_NAME", "ersaasyhar/d3-edge-indo-legal")
+    if adapter_path is None:
+        adapter_path = os.environ.get("D3_ADAPTER_PATH")
+    adapter_str = str(adapter_path) if adapter_path is not None else None
+    cache_key = (model_name, adapter_str, device)
 
-            _GLOBAL_D3_MODEL = AutoModel.from_pretrained(
-                model_name, trust_remote_code=True, device=device
-            )
-        except Exception as e:
-            logger.warning("Failed to load D3 model %s: %s", model_name, e)
+    if cache_key not in _GLOBAL_D3_MODELS:
+        from transformers import AutoModel
+
+        def try_local(name: str) -> Any | None:
+            for kwargs in [
+                {"local_files_only": True},
+                {"revision": "18d61df78684675463af9ae732872478845c5a79", "local_files_only": True},
+            ]:
+                try:
+                    return AutoModel.from_pretrained(
+                        name, trust_remote_code=True, device=device, **kwargs
+                    )
+                except Exception:
+                    pass
             return None
-    return _GLOBAL_D3_MODEL
+
+        # 1. Try local cache for requested model
+        loaded_model = try_local(model_name)
+        # 2. Try local cache for base fallback
+        if loaded_model is None and model_name != "vllm-sr/d3-edge":
+            loaded_model = try_local("vllm-sr/d3-edge")
+        # 3. If still None and remote download explicitly allowed, try remote
+        if loaded_model is None and os.environ.get("D3_DOWNLOAD_REMOTE") == "1":
+            try:
+                loaded_model = AutoModel.from_pretrained(
+                    model_name, trust_remote_code=True, device=device
+                )
+            except Exception:
+                try:
+                    loaded_model = AutoModel.from_pretrained(
+                        "vllm-sr/d3-edge", trust_remote_code=True, device=device
+                    )
+                except Exception:
+                    pass
+
+        if loaded_model is None:
+            logger.warning("Failed to load D3 model checkpoint.")
+            return None
+
+        if loaded_model is not None and adapter_path is not None:
+            adapter_p = Path(adapter_path)
+            if adapter_p.exists():
+                try:
+                    from peft import PeftModel
+
+                    logger.info("Loading LoRA adapter from %s...", adapter_path)
+                    loaded_model.runtime.backbone = PeftModel.from_pretrained(
+                        loaded_model.runtime.backbone, str(adapter_p)
+                    )
+                except Exception as lora_e:
+                    logger.warning("Failed to load LoRA adapter from %s: %s", adapter_path, lora_e)
+            else:
+                logger.warning("LoRA adapter path does not exist: %s", adapter_path)
+
+        _GLOBAL_D3_MODELS[cache_key] = loaded_model
+    return _GLOBAL_D3_MODELS.get(cache_key)
 
 
 class D3Navigator:
     def __init__(
         self,
-        model_name: str = "vllm-sr/d3-edge",
+        model_name: str | None = None,
+        adapter_path: str | Path | None = None,
         device: str = "cpu",
         manifest_path: Path = MANIFEST_PATH,
         lazy: bool = False,
         confidence_threshold: float = 0.60,
     ):
-        self.model_name = model_name
+        self.model_name = model_name or os.environ.get(
+            "D3_MODEL_NAME", "ersaasyhar/d3-edge-indo-legal"
+        )
+        self.adapter_path = adapter_path or os.environ.get("D3_ADAPTER_PATH")
         self.device = device
         self.manifest_path = manifest_path
         self.confidence_threshold = confidence_threshold
@@ -62,7 +122,7 @@ class D3Navigator:
 
     def _ensure_model(self) -> Any | None:
         if self._model is None:
-            self._model = get_d3_model(self.model_name, self.device)
+            self._model = get_d3_model(self.model_name, self.device, adapter_path=self.adapter_path)
         return self._model
 
     def is_available(self) -> bool:
@@ -132,8 +192,7 @@ class D3Navigator:
             return list(range(p_start, p_end + 1))
 
         options = {
-            c["node_id"]: f"{c['title']}. {c.get('summary', '')[:100]}"
-            for c in children[:200]
+            c["node_id"]: f"{c['title']}. {c.get('summary', '')[:100]}" for c in children[:200]
         }
 
         try:
@@ -214,10 +273,33 @@ class D3Navigator:
                 p_map = {p["page_number"]: p["text"] for p in ext.get("pages", [])}
 
             stopwords = {
-                "apa", "saja", "yang", "dan", "ini", "itu", "pada", "oleh",
-                "dari", "untuk", "menurut", "bagaimana", "adalah", "tentang", "baru", "tahun"
+                "apa",
+                "saja",
+                "yang",
+                "dan",
+                "ini",
+                "itu",
+                "pada",
+                "oleh",
+                "dari",
+                "untuk",
+                "menurut",
+                "bagaimana",
+                "adalah",
+                "tentang",
+                "baru",
+                "tahun",
             }
-            meta_words = {"definisi", "sanksi", "pengertian", "syarat", "aturan", "undang", "pidana", "hukum"}
+            meta_words = {
+                "definisi",
+                "sanksi",
+                "pengertian",
+                "syarat",
+                "aturan",
+                "undang",
+                "pidana",
+                "hukum",
+            }
             raw_words = [w for w in query.lower().split() if len(w) >= 3 and w not in stopwords]
             q_words = [w.strip(".,()?!") for w in raw_words if len(w.strip(".,()?!")) >= 3]
 
@@ -226,9 +308,11 @@ class D3Navigator:
                 child_nodes = b.get("nodes", [])
                 if not child_nodes:
                     continue
+
                 def p_score(p):
                     txt = (p.get("title", "") + " " + p.get("summary", "")).lower()
                     return sum(1.0 if w in meta_words else 5.0 for w in q_words if w in txt)
+
                 best_score = max((p_score(p) for p in child_nodes), default=0.0)
                 scored_babs.append((best_score, b))
 
@@ -394,9 +478,21 @@ class D3Navigator:
         )
 
 
-def retrieve(query: str, top_k: int = 5) -> list[RetrievedChunk]:
-    return D3Navigator().retrieve(query, top_k=top_k)
+def retrieve(
+    query: str,
+    top_k: int = 5,
+    model_name: str | None = None,
+    adapter_path: str | Path | None = None,
+) -> list[RetrievedChunk]:
+    return D3Navigator(model_name=model_name, adapter_path=adapter_path).retrieve(
+        query, top_k=top_k
+    )
 
 
-def answer(query: str, top_k: int = 5) -> RAGResponse:
-    return D3Navigator().answer(query, top_k=top_k)
+def answer(
+    query: str,
+    top_k: int = 5,
+    model_name: str | None = None,
+    adapter_path: str | Path | None = None,
+) -> RAGResponse:
+    return D3Navigator(model_name=model_name, adapter_path=adapter_path).answer(query, top_k=top_k)
