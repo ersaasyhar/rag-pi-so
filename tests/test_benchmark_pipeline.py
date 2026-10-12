@@ -51,10 +51,22 @@ def test_ir_metrics_calculation():
         )
     ]
     metrics = evaluate_retrieval_query(gold, retrieved, top_k=5)
+    assert metrics["page_hit_at_1"] == 1.0
+    assert metrics["page_hit_at_5"] == 1.0
     assert metrics["page_hit"] == 1.0
     assert metrics["page_mrr"] == 1.0
     assert metrics["pasal_recall"] == 1.0
     assert metrics["page_recall"] == 0.5  # 1 of 2 gold pages hit
+
+    # Hit at rank 2 (Top-1 miss, Top-5 hit)
+    retrieved_rank2 = [
+        RetrievedChunk(doc_id="uu_1_2023", pages=[999], pasal="Pasal 1", text="", score=0.9),
+        RetrievedChunk(doc_id="uu_1_2023", pages=[166], pasal="Pasal 476", text="", score=0.8),
+    ]
+    metrics2 = evaluate_retrieval_query(gold, retrieved_rank2, top_k=5)
+    assert metrics2["page_hit_at_1"] == 0.0
+    assert metrics2["page_hit_at_5"] == 1.0
+    assert metrics2["page_mrr"] == 0.5
 
 
 def test_dcg_ndcg():

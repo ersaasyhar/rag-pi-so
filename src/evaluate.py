@@ -59,6 +59,8 @@ def evaluate_retrieval_query(
 
     if not gold_page_pairs:
         return {
+            "page_hit_at_1": 1.0,
+            f"page_hit_at_{top_k}": 1.0,
             "page_hit": 1.0,
             "page_recall": 1.0,
             "page_precision": 1.0,
@@ -92,6 +94,7 @@ def evaluate_retrieval_query(
             if gp in c_pasal or gp in c.text.lower():
                 pasals_hit.add(gp)
 
+    page_hit_1 = 1.0 if first_hit_rank == 1 else 0.0
     page_hit = 1.0 if pages_hit else 0.0
     page_recall = len(pages_hit) / len(gold_page_pairs) if gold_page_pairs else 1.0
     page_precision = sum(relevances) / len(chunks) if chunks else 0.0
@@ -100,6 +103,8 @@ def evaluate_retrieval_query(
     pasal_recall = len(pasals_hit) / len(gold_pasals) if gold_pasals else 1.0
 
     return {
+        "page_hit_at_1": round(page_hit_1, 4),
+        f"page_hit_at_{top_k}": round(page_hit, 4),
         "page_hit": round(page_hit, 4),
         "page_recall": round(page_recall, 4),
         "page_precision": round(page_precision, 4),
@@ -167,6 +172,7 @@ def run_evaluation(
     per_query_results: list[dict[str, Any]] = []
 
     retrieval_agg = {
+        "page_hit_at_1": [],
         "page_hit": [],
         "page_recall": [],
         "page_precision": [],
@@ -199,8 +205,9 @@ def run_evaluation(
 
         retrieved = rag_resp.retrieved_chunks
         ir_metrics = evaluate_retrieval_query(gold_pages, retrieved, top_k=top_k)
-        for k, v in ir_metrics.items():
-            retrieval_agg[k].append(v)
+        for k in retrieval_agg:
+            if k in ir_metrics:
+                retrieval_agg[k].append(ir_metrics[k])
 
         # Tier 2 Generation metrics
         cit_acc = evaluate_citation_accuracy(gold_pages, rag_resp.citations)
@@ -228,6 +235,7 @@ def run_evaluation(
             {
                 "id": q_id,
                 "question": question,
+                "page_hit_at_1": bool(ir_metrics.get("page_hit_at_1", 0.0)),
                 "page_hit": bool(ir_metrics["page_hit"]),
                 "page_recall": ir_metrics["page_recall"],
                 "pasal_recall": ir_metrics["pasal_recall"],
@@ -249,8 +257,9 @@ def run_evaluation(
     mean_ir = {
         f"{k}_at_{top_k}": round(float(np.mean(v)), 4)
         for k, v in retrieval_agg.items()
-        if k != "page_mrr"
+        if k not in ("page_mrr", "page_hit_at_1")
     }
+    mean_ir["page_hit_at_1"] = round(float(np.mean(retrieval_agg["page_hit_at_1"])), 4)
     mean_ir["page_mrr"] = round(float(np.mean(retrieval_agg["page_mrr"])), 4)
 
     mean_gen = {k: round(float(np.mean(v)), 4) for k, v in gen_agg.items()}
