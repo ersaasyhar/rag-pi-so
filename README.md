@@ -82,7 +82,7 @@ uv run python src/chat.py --method tree-d3 --d3-model ersaasyhar/d3-edge-indo-le
 
 ## 3. Benchmark Results & Key Findings
 
-Empirical evaluation results executed across Indonesian statutory law queries (`data/results/`).
+Empirical evaluation results executed across Indonesian statutory law queries (`data/results/`). Detailed visual analysis and Pareto frontiers are charted in [Benchmark Visualizations & Findings](docs/visualizations.md).
 
 ### Benchmark Comparison Table
 

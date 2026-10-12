@@ -23,6 +23,7 @@
 - Chat assistant CLI (D3): `uv run python src/chat.py --method tree-d3 --d3-model ersaasyhar/d3-edge-indo-legal`
 - Train D3 decision model: `uv run python scripts/train_d3_decision.py --epochs 3`
 - Export D3 trajectories: `uv run python scripts/export_d3_dataset.py`
+- Generate visualizations: `uv run python scripts/visualize_results.py`
 
 ## Environment Variables
 
@@ -38,7 +39,7 @@ Defined in `.env`:
 ## Directory Structure
 
 - `data/`: Corpus PDFs, extracted JSON, parsed trees, chunks, Qdrant stores, benchmark datasets, D3 trajectories.
-- `docs/`: Legal and retrieval metric glossary (`docs/glossary.md`).
+- `docs/`: Legal glossary (`docs/glossary.md`) and visual findings (`docs/visualizations.md`, `docs/assets/`).
 - `notebooks/`: Google Colab GPU training notebook (`notebooks/train_d3_colab.ipynb`).
 - `scripts/`: Download corpus, generate benchmark, run benchmark CLI, export/train D3 models.
 - `src/`: Extractor, legal parser, chunker, LLM client, context formatter, evaluation harness, chat assistant.
