@@ -160,7 +160,7 @@ Input Trajectory ──►│ Qwen3.5-0.6B Backbone + PEFT LoRA (r=16) │
 2. **Parameter-Efficient LoRA**: Applied to backbone attention projections (`q_proj`, `k_proj`, `v_proj`, `o_proj`, $r=16$, $\alpha=32$, dropout $0.05$). Trains **1,081,344 parameters** (0.1816% of 595M total parameters).
 3. **Exact Decision Loss**: Left-padded chat sequences pass through the backbone. The last hidden state is projected via `hidden @ readout.T`. Candidate choices not present in the prompt are masked out before cross-entropy evaluation.
 4. **Standalone Trainer**: `scripts/train_d3_decision.py` handles local/remote training, validation evaluation, and LoRA weight merging (`--merge-and-upload`).
-5. **Elbow Method Optimization**: Uses a 4-epoch fine-tuning trajectory ($N=4$ for 7.4K samples) to locate the inflection knee point ($\text{elbow\_epoch} = \arg\min_e \text{val\_loss}_e$):
+5. **Elbow Method Optimization**: Uses a 4-epoch fine-tuning trajectory ($N=4$ for 7.4K samples) to locate the inflection knee point ($e_{\text{elbow}} = \arg\min_e \mathcal{L}_{\text{val}}(e)$):
    - **Phase 1: Steep Alignment (Epochs 0–1)**: Loss drops sharply (~2.82 $\rightarrow$ ~1.49, +30% acc gain) as model aligns with 255-way non-autoregressive decision projections.
    - **Phase 2: Knee Refinement (Epochs 2–3)**: Cross-chapter routing rules solidify; validation loss reaches optimum and accuracy peaks.
    - **Phase 3: Saturation & Overfit Zone (Epoch 4+)**: Validation loss flattens ($\Delta L < 0.05$) while training loss continues decreasing, signaling statutory memorization.
